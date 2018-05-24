@@ -218,12 +218,6 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 			}
 		}
 
-
-
-
-
-
-/*
 	//ADJUST FOR 2ND CORNER
 	if(state == 6){
 		//Obtain the datapoint angle and position of the NEWEST point away from the robot (which technically shows the "open way" for the robot to go to
@@ -236,7 +230,6 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position		
 		state = 7;
 	}
-
 	//FACE THE DIRECTION OF THAT NEW CLEAR/OPEN POINT (FOR 2ND CORNER)
 	if(state == 7){
 			//IMPORTANT NOTE: This code assumes that the robot car is always facing "upwards" when it is being used
@@ -277,7 +270,6 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 				ROS_INFO("Angle Error!");
 			}
 		}	
-
 	//DRIVE TO THAT CORNER (2nd Corner)
 	if(state == 8){ 
 		if(frontReading > 0.4){
@@ -289,10 +281,9 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 			state = 9;		
 		}
 	}
-
 	//SECOND CORNER SPIN INSTANCE
 	if(state == 9){
-			if((angleSum >= 0) && (angleSum < 124)){
+			if((angleSum >= 0) && (angleSum < 248)){
 				//Spin 
 				velocityCommand.linear.x = 0.0;
 				velocityCommand.angular.z = 0.5;
@@ -305,7 +296,6 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 				state = 10;
 			}
 		}
-
 	//ADJUST FOR 3RD CORNER
 	if(state == 10){
 		//Obtain the datapoint angle and position of the NEWEST point away from the robot (which technically shows the "open way" for the robot to go to
@@ -318,7 +308,6 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position		
 		state = 11;
 	}
-
 	//FACE THE DIRECTION OF THAT NEW CLEAR/OPEN POINT (FOR 3RD CORNER)
 	if(state == 11){
 			//IMPORTANT NOTE: This code assumes that the robot car is always facing "upwards" when it is being used
@@ -361,19 +350,18 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 		}
 	
 	//DRIVE TO THAT CORNER (3rd Corner)
-	if(state == 8){ 
+	if(state == 12){ 
 		if(frontReading > 0.4){
 			velocityCommand.linear.x = 0.5;
 			velocityCommand.angular.z = 0;
 		} else {
 			velocityCommand.linear.x = 0;
 			velocityCommand.angular.z = 0;	
-			state = 9;		
+			state = 13;		
 		}
 	}
-
 	//THIRD CORNER SPIN INSTANCE
-	if(state == 9){
+	if(state == 14){
 			if((angleSum >= 0) && (angleSum < 124)){
 				//Spin 
 				velocityCommand.linear.x = 0.0;
@@ -385,13 +373,11 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 				angleSum = 0;
 				velocityCommand.linear.x = 0.0;
 				velocityCommand.angular.z = 0.0;
-				state = 10;
+				state = 15;
 			}
 		}
-
 	//ADJUST FOR 4TH CORNER
-	if(state == 10){
-	ROS_INFO("State 10");
+	if(state == 15){
 		//Obtain the datapoint angle and position of the NEWEST point away from the robot (which technically shows the "open way" for the robot to go to
 		for(int i = 0; i < rangeDataNum; i++){
 			if((laserScanData->ranges[i] > largeComp)){
@@ -400,15 +386,13 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 			}	
 		}
 		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position		
-		state = 11;
+		state = 16;
 	}
-
 	//FACE THE DIRECTION OF THAT NEW CLEAR/OPEN POINT (FOR 4th CORNER)
-	if(state == 11){
-	ROS_INFO("State 11");
+	if(state == 16){
 			//IMPORTANT NOTE: This code assumes that the robot car is always facing "upwards" when it is being used
 			//Also by default the odometer reading is 0, with positive being on the left and negative being on the right
-			if((largeAngle > 0) && (state == 11)){ //The object is on the left side
+			if((largeAngle > 0) && (state == 16)){ //The object is on the left side
 				//use -ve
 				//ROS_INFO("Larger Loop");
 				if(angle < (largeAngle + 0.1)){
@@ -422,9 +406,9 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 					velocityCommand.angular.z = 0.0;
 					largeComp = 0;
 					largeAngle = 0;
-					state = 12;
+					state = 17;
 				}
-			} else if((largeAngle < 0) && (state == 11)) { //The object is on the right side
+			} else if((largeAngle < 0) && (state == 16)) { //The object is on the right side
 				//use +ve 
 				///ROS_INFO("Smaller Loop");
 				if(angle > (largeAngle - 0.1)){ //the robot will believe its angle is 0
@@ -438,7 +422,7 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 					velocityCommand.angular.z = 0.0;
 					largeComp = 0;
 					largeAngle = 0;
-					state = 12; //move the trigger to a new value 
+					state = 17; //move the trigger to a new value 
 				}
 			} else {
 				ROS_INFO("Angle Error!");
@@ -446,7 +430,7 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 		}
 	
 	//DRIVE TO THAT CORNER (4th Corner)
-	if(state == 12){ 
+	if(state == 17){ 
 	ROS_INFO("State 12");
 		if(frontReading > 0.4){
 			velocityCommand.linear.x = 0.5;
@@ -454,12 +438,11 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 		} else {
 			velocityCommand.linear.x = 0;
 			velocityCommand.angular.z = 0;	
-			state = 13;		
+			state = 18;		
 		}
 	}
-
 	//FOURTH CORNER SPIN INSTANCE
-	if(state == 13){
+	if(state == 18){
 			if((angleSum >= 0) && (angleSum < 124)){
 				//Spin 
 				velocityCommand.linear.x = 0.0;
@@ -470,12 +453,9 @@ frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directl
 				angleSum = 0;
 				velocityCommand.linear.x = 0.0;
 				velocityCommand.angular.z = 0.0;
-				state = 14;
+				state = 19;
 			}
 		}
-
-*/
-
 
 //Ending bracket
 }
