@@ -7,18 +7,47 @@
 #define PI 3.1416
 
 geometry_msgs::Twist velocityCommand; 
-
-float frontReading = 0;
-//Initial wall driving code
-float wallInit = 0;
+//State Variable
+float state = 0;
+//Initial Angle Readings
 float largeComp = 0;
 float largeAngle = 0;
-//Positional Readings
+//Position variables
+float quadrantVal = 0;
+float frontReading = 0;
+float frontScanCount = 0;
+float obstructionReading = 0;
+//Spin code
+float angleSum = 0; //this sums up all the angles
+//Obstacle Detection (Good for 1 obstacle)
+float closest = 100;
+float closestPoint = 0;
+float closestX = 0;
+float closestY = 0;
+float obstacleFound = 0;
+float obstacle = 0;
+float smallAngle = 0;
+
+//float originalAngle = 0; //hold onto this value as the original value, this is used to ensure that it is static all the time
+//float moveStartAngle = 0; //this starts the movement process
+//float sCase = 0; //sCase covers the case of whether the angle is around 3.05 and higher since +0.1 will make it the negative equivalent
+//float angleLatch = 0; //latch onto a single angle
+//QuadrantVal Guide, each value corresponds to the quadrant of the map that the robot believes that it is in
+//Though this is generally moreso used to define which way the robot car is facing and where it should turn to afterwards
+//  _ _ _ _ _ _
+// |2    |1    |
+// |_ _ _|_ _ _|
+// |3    |4    |
+// |_ _ _|_ _ _|
+//Odometer Reading Variables
 float xP = 0;
 float yP = 0;
 float zP = 0;
 float wP = 0;
 float angle = 0;
+//Debugging Variables
+float movementCount = 0;
+float dodgemovementCount = 0;
 /*
 The scan subscriber call back function
 To understand the sensor_msgs::LaserScan object look at
@@ -41,9 +70,10 @@ void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& laserScanData) {
 // Compute the number of data points
 // max angle and min angle of the laser scanner divide by the increment angle of each data point
 float rangeDataNum = 1 + (laserScanData->angle_max - laserScanData->angle_min)  / (laserScanData->angle_increment);
-//*******************************
-	//GET ANGLE	
-	if(wallInit == 0){
+frontReading = laserScanData->ranges[rangeDataNum/2]; //take the reading directly in front of the robot
+
+	//GET ANGLE OF FIRST CLEAR/OPEN POINT
+	if(state == 0){
 		//Obtain the datapoint angle and position of the furtherest point away from the robot (which should technically mean that it has hit a wall)
 		for(int i = 0; i < rangeDataNum; i++){
 			if((laserScanData->ranges[i] > largeComp)){
@@ -52,45 +82,372 @@ float rangeDataNum = 1 + (laserScanData->angle_max - laserScanData->angle_min)  
 			}	
 		}
 		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position
-		wallInit = 1; //set the flag to high so that the code does not enter this chunk again
+
+		//Setting the quadrant values to tell the robot which part of the map it is in		
+		if((largeAngle < 0.1) && (largeAngle > -1.56)){
+			quadrantVal = 1; //around 0 to -1.57	
+		} else if((largeAngle > 0.1) && (largeAngle < 1.56)){
+			quadrantVal = 2; //around 0 to 1.57
+		} else if((largeAngle > 1.57) && (largeAngle < 3.13)){
+			quadrantVal = 3; //around 1.57 to 3.14
+		} else {
+			quadrantVal = 4; //around -1.57 to -3.14
+		}
+		state = 1; //set the flag to high so that the code does not enter this chunk again
 	}
-	//FACE THAT ANGLE
-	if(wallInit == 1){
-			//IMPORTANT NOTE: This code assumes that the robot car is always facing "upwards" when it is being used
-			//Also by default the odometer reading is 0, with positive being on the left and negative being on the right
-			if((largeAngle > 0) && (wallInit == 1)){ //The object is on the left side
+
+	//FACE THE DIRECTION OF THAT CLEAR/OPEN POINT
+	if(state == 1){
+			if((largeAngle > 0) && (state == 1)){ //The object is on the left side
 				//use -ve
-				ROS_INFO("Larger Loop");
+				//ROS_INFO("Larger Loop");
 				if(angle < (largeAngle + 0.1)){
-				ROS_INFO("Enter Larger While");
-					ROS_INFO("Angle = %.2f", angle);
+				//ROS_INFO("Enter Larger While");
+					//ROS_INFO("Angle = %.2f", angle);
 					velocityCommand.linear.x = 0.0;
 					velocityCommand.angular.z = 0.1; //turn to the left side at 0.1 rad/s
 				} else if( (angle < (largeAngle + 0.2)) && (angle > (largeAngle - 0.2)) ){
-				ROS_INFO("Point Reached");
+				//ROS_INFO("Point Reached");
 					velocityCommand.linear.x = 0.0;
 					velocityCommand.angular.z = 0.0;
-					wallInit = 2;
+					largeComp = 0;
+					largeAngle = 0;
+					state = 2;
 				}
-			} else if((largeAngle < 0) && (wallInit == 1)) { //The object is on the right side
+			} else if((largeAngle < 0) && (state == 1)) { //The object is on the right side
 				//use +ve 
-				ROS_INFO("Smaller Loop");
+				///ROS_INFO("Smaller Loop");
 				if(angle > (largeAngle - 0.1)){ //the robot will believe its angle is 0
-				ROS_INFO("Entering Smaller While");
-					ROS_INFO("Angle = %.2f", angle);
+				//ROS_INFO("Entering Smaller While");
+					//ROS_INFO("Angle = %.2f", angle);
 					velocityCommand.linear.x = 0.0;
 					velocityCommand.angular.z = -0.1; //turn to the right side at 0.1 rad/s
 				} else if( (angle < (largeAngle + 0.2)) && (angle > (largeAngle - 0.2)) ){
-					ROS_INFO("Point Reached");
+					//ROS_INFO("Point Reached");
 					velocityCommand.linear.x = 0.0;
 					velocityCommand.angular.z = 0.0;
-					wallInit = 2;
+					largeComp = 0;
+					largeAngle = 0;
+					state = 2; //move the trigger to a new value 
 				}
 			} else {
-				ROS_INFO("Ignored");
+				ROS_INFO("Angle Error!");
 			}
-		}		
-//******************************	
+		}	
+
+	//MOVE TO THAT POINT UNTIL YOU REACH THE WALL
+	if(state == 2){
+		//ROS_INFO("FrontReading = %.2f", frontReading);
+		if(frontReading > 0.4){
+			//ROS_INFO("Entering Move");
+			velocityCommand.linear.x = 0.5; //stop forward movement 
+			velocityCommand.angular.z = 0; //turn left
+			movementCount++;
+		} else {
+			velocityCommand.linear.x = 0;
+			velocityCommand.angular.z = 0;  
+			state = 3; //set the trigger to a new value
+		}
+	}
+
+	//STRAIGHTEN AND FACE A CORNER (1st Corner)
+	if(state == 3){
+		//ROS_INFO("Quadrant 1");
+		if(quadrantVal == 1){ //if we are in quadrant 1, we will try to align back to 0 from a negative value
+			if(angle < 0){ //we cannot exactly get to 0, so we aim for 0.1 instead to ensure we are going away from the wall, as with before
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.1;
+			} else {
+				//Come to a complete stop
+				velocityCommand.linear.x = 0;
+				velocityCommand.angular.z = 0; 
+				state = 4; //leave state
+			}
+		} else if(quadrantVal == 2){
+		//ROS_INFO("Quadrant 2"); //moving back towards 0 from positive
+			if(angle > 0){ //we cannot exactly get to 0, so we aim for 0.1 instead to ensure we are going away from the wall
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = -0.1;
+			} else {
+				//Come to a complete stop
+				velocityCommand.linear.x = 0;
+				velocityCommand.angular.z = 0; 
+				state = 4;
+			}
+		} else if(quadrantVal == 3){
+		//ROS_INFO("Quadrant 3"); //moving to positive from negative
+			if(angle < 3.13){ //we cannot exactly get to -3.14, so we have to aim for POSITIVE 3.13 instead to ensure we are going away from the wall
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.1;
+			} else {
+				//Come to a complete stop
+				velocityCommand.linear.x = 0;
+				velocityCommand.angular.z = 0; 
+				state = 4;
+			}
+		} else if(quadrantVal == 4){
+		//ROS_INFO("Quadrant 4"); // moving to negative from positive
+			if(angle > -3.13){ //we cannot exactly get to 0, so we aim for 0.1 instead to ensure we are going away from the wall
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = -0.1;
+			} else {
+				//Come to a complete stop
+				velocityCommand.linear.x = 0;
+				velocityCommand.angular.z = 0; 
+				state = 4;
+			}
+		} else {
+			ROS_INFO("Quadrant Error!");
+		}
+	}
+
+	//DRIVE TO THAT CORNER (1st Corner) -> Robot Should Be Facing The Right
+	if(state == 4){ 
+		if(frontReading > 0.4){
+			velocityCommand.linear.x = 0.5;
+			velocityCommand.angular.z = 0;
+			} else {
+				velocityCommand.linear.x = 0;			
+				velocityCommand.angular.z = 0;	
+				state = 5;		
+		}
+	}
+
+	//FIRST CORNER SPIN INSTANCE
+	if(state == 5){
+			if((angleSum >= 0) && (angleSum < 124)){
+				//Spin 
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.5;
+				angleSum = angleSum + 1;
+				ROS_INFO("Angle Sum: %.2f", angleSum);
+			} else {
+				angleSum = 0;
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.0;
+				state = 6;
+			}
+		}
+
+	//ADJUST FOR 2ND CORNER
+	if(state == 6){
+		//Obtain the datapoint angle and position of the NEWEST point away from the robot (which technically shows the "open way" for the robot to go to
+		for(int i = 0; i < rangeDataNum; i++){
+			if((laserScanData->ranges[i] > largeComp)){
+				largeComp = laserScanData->ranges[i];
+				largeComp = i;
+			}	
+		}
+		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position		
+		state = 7;
+	}
+
+	//FACE THE DIRECTION OF THAT NEW CLEAR/OPEN POINT (FOR 2ND CORNER)
+	if(state == 7){
+			if((largeAngle > 0) && (state == 7)){ //The object is on the left side
+				//use -ve
+				//ROS_INFO("Larger Loop");
+				if(angle < (largeAngle + 0.1)){
+				//ROS_INFO("Enter Larger While");
+					//ROS_INFO("Angle = %.2f", angle);
+					velocityCommand.linear.x = 0.0;
+					velocityCommand.angular.z = 0.1; //turn to the left side at 0.1 rad/s
+				} else if( (angle < (largeAngle + 0.2)) && (angle > (largeAngle - 0.2)) ){
+				//ROS_INFO("Point Reached");
+					velocityCommand.linear.x = 0.0;
+					velocityCommand.angular.z = 0.0;
+					largeComp = 0;
+					largeAngle = 0;
+					state = 8;
+				}
+			} else if((largeAngle < 0) && (state == 7)) { //The object is on the right side
+				//use +ve 
+				///ROS_INFO("Smaller Loop");
+				if(angle > (largeAngle - 0.1)){ //the robot will believe its angle is 0
+				//ROS_INFO("Entering Smaller While");
+					//ROS_INFO("Angle = %.2f", angle);
+					velocityCommand.linear.x = 0.0;
+					velocityCommand.angular.z = -0.1; //turn to the right side at 0.1 rad/s
+				} else if( (angle < (largeAngle + 0.2)) && (angle > (largeAngle - 0.2)) ){
+					//ROS_INFO("Point Reached");
+					velocityCommand.linear.x = 0.0;
+					velocityCommand.angular.z = 0.0;
+					largeComp = 0;
+					largeAngle = 0;
+					state = 8; //move the trigger to a new value 
+				}
+			} else {
+				ROS_INFO("Angle Error!");
+			}
+		}	
+
+//********************
+//OBSTACLE DETECTION 	
+		if( (state == 8) && (obstacleFound < 1) ){
+		//Obtain the datapoint position of the closest point to the robot, which should always be the 		bottom most corner, when stationary
+
+			for(int i = rangeDataNum/2; i < rangeDataNum; i++){
+				if((laserScanData->ranges[i] < closest)){
+					closest = laserScanData->ranges[i];
+					closestPoint = i;
+				}	
+			}
+			smallAngle = laserScanData->angle_increment*closestPoint; //obtain the angle of this smallest position
+			//Calculate X and Y co-ordinates of the closest point
+			closestX = closest*(cos(smallAngle));
+			closestY = closest*(sin(smallAngle));
+			//If the closest point is equal to or greater than the range_max (most like it is going to be equal),
+			//then there was no object
+			if(closest < 1){
+				obstacleFound = 1;
+			} else {
+				obstacleFound = 0;
+			}
+		
+			state = 9;
+		}
+//********************
+
+	//DRIVE TO THAT CORNER (2nd Corner)
+	if(state == 9){ 
+		if(frontReading > 0.4){
+			velocityCommand.linear.x = 0.5;
+			velocityCommand.angular.z = 0;
+			movementCount++;
+		} else {
+			velocityCommand.linear.x = 0;
+			velocityCommand.angular.z = 0;	
+			state = 10;		
+		}
+	}
+
+
+	//SECOND CORNER SPIN INSTANCE
+	if(state == 10){
+			if((angleSum >= 0) && (angleSum < 124)){
+				//Spin 
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.5;
+				angleSum = angleSum + 1;
+				ROS_INFO("Angle Sum: %.2f", angleSum);
+			} else {
+				angleSum = 0;
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.0;
+				state = 11;
+			}
+		}
+	//ADJUST FOR 3RD CORNER
+	if(state == 11){
+		//Obtain the datapoint angle and position of the NEWEST point away from the robot (which technically shows the "open way" for the robot to go to
+		for(int i = 0; i < rangeDataNum; i++){
+			if((laserScanData->ranges[i] > largeComp)){
+				largeComp = laserScanData->ranges[i];
+				largeComp = i;
+			}	
+		}
+		largeAngle = (laserScanData->angle_increment*largeComp) - 1.57; //obtain the angle of furtherest position		
+		state = 12;
+	}
+
+	//FACE THE DIRECTION OF THAT NEW CLEAR/OPEN POINT (FOR 3RD CORNER)
+	if(state == 12){
+		if((angle > -2.9) && (state == 12)){ //The object is on the left side
+			//ROS_INFO("Enter Larger While");
+			//ROS_INFO("Angle = %.2f", angle);
+			velocityCommand.linear.x = 0.0;
+			velocityCommand.angular.z = 0.1; //turn to the left side at 0.1 rad/s
+		} else if( angle < -3 ){
+		//ROS_INFO("Point Reached");
+			velocityCommand.linear.x = 0.0;
+			velocityCommand.angular.z = 0.0;
+			largeComp = 0;
+			largeAngle = 0;
+			state = 13;
+		} 
+	}
+
+//********************
+//OBSTACLE DETECTION 	
+		if( (state == 13) && (obstacleFound < 1) ){
+		//Obtain the datapoint position of the closest point to the robot, which should always be the 		bottom most corner, when stationary
+
+			for(int i = rangeDataNum/2; i < rangeDataNum; i++){
+				if((laserScanData->ranges[i] < closest)){
+					closest = laserScanData->ranges[i];
+					closestPoint = i;
+				}	
+			}
+			smallAngle = laserScanData->angle_increment*closestPoint; //obtain the angle of this smallest position
+			//Calculate X and Y co-ordinates of the closest point
+			closestX = closest*(cos(smallAngle));
+			closestY = closest*(sin(smallAngle));
+			//If the closest point is equal to or greater than the range_max (most like it is going to be equal),
+			//then there was no object
+			if(closest < 1){
+				obstacleFound = 0;
+			} else {
+				obstacleFound = 1;
+			}
+			state = 14;
+		}
+//********************
+
+	//DRIVE TO THAT CORNER (3rd Corner)
+	if(state == 14){ 
+		if(frontReading > 0.4){
+			velocityCommand.linear.x = 0.5;
+			velocityCommand.angular.z = 0;
+			movementCount++;
+		} else {
+			velocityCommand.linear.x = 0;
+			velocityCommand.angular.z = 0;	
+			state = 15;		
+		}
+	}
+
+	//THIRD CORNER SPIN INSTANCE
+	if(state == 15){
+			if((angleSum >= 0) && (angleSum < 155)){ //this particular turn is hard-coded to face away from the wall
+				//Spin 
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.5;
+				angleSum = angleSum + 1;
+				ROS_INFO("Angle Sum: %.2f", angleSum);
+			} else {
+				angleSum = 0;
+				velocityCommand.linear.x = 0.0;
+				velocityCommand.angular.z = 0.0;
+				state = 16;
+			}
+		}
+
+//********************
+//OBSTACLE DETECTION 	
+		if( (state == 17) && (obstacleFound < 1) ){
+		//Obtain the datapoint position of the closest point to the robot, which should always be the 		bottom most corner, when stationary
+			for(int i = rangeDataNum/2; i < rangeDataNum; i++){
+				if((laserScanData->ranges[i] < closest)){
+					closest = laserScanData->ranges[i];
+					closestPoint = i;
+				}	
+			}
+			smallAngle = laserScanData->angle_increment*closestPoint; //obtain the angle of this smallest position
+			//Calculate X and Y co-ordinates of the closest point
+			closestX = closest*(cos(smallAngle));
+			closestY = closest*(sin(smallAngle));
+			//If the closest point is equal to or greater than the range_max (most like it is going to be equal),
+			//then there was no object
+			if(closest < 1){
+				obstacleFound = 0;
+			} else {
+				obstacleFound = 1;
+			}
+			state = 18;
+		}
+//********************
+
+//Ending bracket
 }
 
 int main (int argc, char **argv)
@@ -111,9 +468,20 @@ int main (int argc, char **argv)
 	
 	while(ros::ok()) // publish the velocity set in the call back
 	{
-		ROS_INFO("Angle = %.2f", angle);
-		ROS_INFO("largeAngle = %.2f", largeAngle);
-		ROS_INFO("wallInit Value = %.2f", wallInit);
+		//ROS_INFO("Movement Count = %.2f", movementCount);		
+		//ROS_INFO("Dodge Movement Count = %.2f", dodgemovementCount);		
+		//ROS_INFO("Robot Angle = %.2f", angle);
+		ROS_INFO("State = %.2f", state);
+		//ROS_INFO("Max: %.2f", max);
+		//ROS_INFO("Min: %.2f", min);
+		if(obstacleFound == 1){
+			ROS_INFO("Obstacle Found");
+			//ROS_INFO("Internal Loop Closest: [%.2f]", closest);
+			ROS_INFO("Obstacle Angle: [%.2f]", smallAngle);
+			ROS_INFO("X: [%.2f], Y:[%.2f]", closestX, closestY); 
+		} else {
+			ROS_INFO("No Obstacle Found");
+		}
 		ros::spinOnce();
 		loop_rate.sleep();
 
